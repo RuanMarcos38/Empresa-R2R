@@ -62,5 +62,6 @@ JSON
 cp /app/logs/n8n.log /app/public/n8n.log 2>/dev/null || true
 cp /app/logs/evolution.log /app/public/evolution.log 2>/dev/null || true
 
-echo "Agente ativo na porta ${PORT:-3000}"
-exec python -m http.server "${PORT:-3000}" --directory /app/public
+AGENT_PORT="${R2R_AGENT_PORT:-3000}"
+echo "Agente ativo na porta $AGENT_PORT"
+exec python -m http.server "$AGENT_PORT" --directory /app/public
