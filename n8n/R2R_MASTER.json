@@ -1216,9 +1216,138 @@
         -1000
       ],
       "parameters": {
-        "content": "# R2R MASTER OS • AUTOSSUFICIENTE v4\n\n## Variáveis privadas no EasyPanel / n8n\n- N8N_BLOCK_ENV_ACCESS_IN_NODE=false\n- EVOLUTION_API_KEY\n- R2R_AI_API_KEY\n- R2R_AI_MODEL (opcional; padrão gpt-5.6)\n- R2R_ADMIN_PHONE\n\n## Integrações nativas\n- OpenAI: endpoint oficial direto no workflow\n- Evolution API: envio/recebimento direto\n- CRM/fila/KPIs: memória persistente do workflow n8n\n- Google Calendar: nó nativo, credencial \"R2R Google Calendar\"\n- PostgreSQL: estrutura SQL em /database/schema.sql para migração/backup\n\nREMOVIDOS:\nR2R_AI_ENDPOINT\nR2R_DATA_API\nR2R_NOTIFY_WEBHOOK\nR2R_CALENDAR_WEBHOOK",
+        "content": "# R2R MASTER OS • AUTOSSUFICIENTE v4\n\n## Variáveis privadas no EasyPanel / n8n\n- N8N_BLOCK_ENV_ACCESS_IN_NODE=false\n- EVOLUTION_API_KEY\n- R2R_AI_API_KEY\n- R2R_AI_MODEL (opcional; padrão gpt-5.6)\n- R2R_ADMIN_PHONE\n\n## Integrações nativas\n- OpenAI: endpoint oficial direto no workflow\n- Evolution API: envio/recebimento direto\n- CRM/fila/KPIs: memória persistente do workflow n8n\n- Google Calendar: nó nativo, credencial \"R2R Google Calendar\"\n- PostgreSQL: estrutura SQL em /database/schema.sql para migração/backup\n\nREMOVIDOS:\nR2R_AI_ENDPOINT\nR2R_DATA_API\nR2R_NOTIFY_WEBHOOK\nR2R_CALENDAR_WEBHOOK\n\n## Webhooks internos adicionais\nPOST /webhook/r2r/metrics-intake\nPOST /webhook/r2r/sale-intake\nPOST /webhook/r2r/client-update",
         "height": 520,
         "width": 740
+      }
+    },
+    {
+      "id": "r2r-v4-agenda-store",
+      "name": "Agenda • Registrar Reunião",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        2920
+      ],
+      "parameters": {
+        "jsCode": "const input=$('Agenda • Validar').item.json;\nconst event=$json;\nconst store=$getWorkflowStaticData('global');\nstore.meetings=store.meetings||[];\nconst row={\n  id:event.id||('meeting-'+Date.now()),\n  name:input.name||'Lead R2R',\n  email:input.email||'',\n  phone:input.phone||'',\n  service_interest:input.service_interest||'',\n  start:event.start?.dateTime||event.start||input.start||input.preferred_times?.[0]||'',\n  end:event.end?.dateTime||event.end||input.end||'',\n  meeting_url:event.hangoutLink||event.htmlLink||'',\n  calendar_event_id:event.id||'',\n  created_at:new Date().toISOString()\n};\nstore.meetings.push(row);\nreturn [{json:row}];"
+      }
+    },
+    {
+      "id": "r2r-v4-proposal-store",
+      "name": "Proposta • Salvar no CRM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        790,
+        3270
+      ],
+      "parameters": {
+        "jsCode": "const p=$json;\nconst store=$getWorkflowStaticData('global');\nstore.proposals=store.proposals||[];\nconst row={...p,id:p.id||('proposal-'+Date.now()),created_at:p.generated_at||new Date().toISOString()};\nstore.proposals.push(row);\nreturn [{json:row}];"
+      }
+    },
+    {
+      "id": "r2r-v4-cs-store",
+      "name": "CS • Atualizar Risco",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        530,
+        4840
+      ],
+      "parameters": {
+        "jsCode": "const x=$json;\nconst store=$getWorkflowStaticData('global');\nstore.clients=store.clients||{};\nconst key=String(x.client_id||x.client_key||x.phone||x.email||x.name||'');\nif(key){\n  store.clients[key]={...(store.clients[key]||{}),...x,updated_at:new Date().toISOString()};\n}\nreturn [{json:x}];"
+      }
+    },
+    {
+      "id": "r2r-v4-metrics-in",
+      "name": "Métricas • Entrada",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -250,
+        5900
+      ],
+      "webhookId": "r2r-v4-metrics-in-wh",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "r2r/metrics-intake",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-v4-metrics-store",
+      "name": "Métricas • Salvar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10,
+        5900
+      ],
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;\nconst rows=Array.isArray(b)?b:(Array.isArray(b.items)?b.items:[b]);\nconst store=$getWorkflowStaticData('global');\nstore.metrics=store.metrics||[];\nfor(const r of rows){\n  store.metrics.push({...r,at:r.at||r.date||new Date().toISOString()});\n}\nstore.metrics=store.metrics.slice(-5000);\nreturn [{json:{ok:true,received:rows.length,total:store.metrics.length}}];"
+      }
+    },
+    {
+      "id": "r2r-v4-sale-in",
+      "name": "Venda • Entrada",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -250,
+        6250
+      ],
+      "webhookId": "r2r-v4-sale-in-wh",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "r2r/sale-intake",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-v4-sale-store",
+      "name": "Venda • Registrar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10,
+        6250
+      ],
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;\nconst store=$getWorkflowStaticData('global');\nstore.sales=store.sales||[];\nstore.clients=store.clients||{};\nconst row={...b,id:b.id||('sale-'+Date.now()),closed_at:b.closed_at||new Date().toISOString()};\nstore.sales.push(row);\nconst clientKey=String(b.client_key||b.lead_key||b.phone||b.email||'');\nif(clientKey && Number(b.recurring_value||0)>0){\n  store.clients[clientKey]={...(store.clients[clientKey]||{}),client_key:clientKey,mrr:Number(b.recurring_value||0),status:'ativo',updated_at:new Date().toISOString()};\n}\nreturn [{json:{ok:true,sale:row}}];"
+      }
+    },
+    {
+      "id": "r2r-v4-client-in",
+      "name": "Cliente • Atualização",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -250,
+        6600
+      ],
+      "webhookId": "r2r-v4-client-in-wh",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "r2r/client-update",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-v4-client-store",
+      "name": "Cliente • Salvar Atualização",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        10,
+        6600
+      ],
+      "parameters": {
+        "jsCode": "const b=$json.body??$json;\nconst store=$getWorkflowStaticData('global');\nstore.clients=store.clients||{};\nconst key=String(b.client_key||b.client_id||b.phone||b.email||b.name||('client-'+Date.now()));\nstore.clients[key]={...(store.clients[key]||{}),...b,client_key:key,updated_at:new Date().toISOString()};\nreturn [{json:{ok:true,client:store.clients[key]}}];"
       }
     }
   ],
@@ -1623,7 +1752,7 @@
       "main": [
         [
           {
-            "node": "CS • Notificar",
+            "node": "CS • Atualizar Risco",
             "type": "main",
             "index": 0
           }
@@ -1690,6 +1819,72 @@
         [
           {
             "node": "Contato • Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agenda • Integrar Calendar": {
+      "main": [
+        [
+          {
+            "node": "Agenda • Registrar Reunião",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proposta • Interpretar": {
+      "main": [
+        [
+          {
+            "node": "Proposta • Salvar no CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CS • Atualizar Risco": {
+      "main": [
+        [
+          {
+            "node": "CS • Notificar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Métricas • Entrada": {
+      "main": [
+        [
+          {
+            "node": "Métricas • Salvar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Venda • Entrada": {
+      "main": [
+        [
+          {
+            "node": "Venda • Registrar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cliente • Atualização": {
+      "main": [
+        [
+          {
+            "node": "Cliente • Salvar Atualização",
             "type": "main",
             "index": 0
           }
