@@ -1,0 +1,1832 @@
+{
+  "name": "R2R MARKETING DIGITAL • MASTER OS • PRODUÇÃO",
+  "nodes": [
+    {
+      "id": "r2r-0001",
+      "name": "SEÇÃO • HEALTHCHECK",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -400
+      ],
+      "parameters": {
+        "content": "# R2R Healthcheck\nEndpoint público usado pelo CI/CD para confirmar que o workflow está ativo.",
+        "height": 280,
+        "width": 580
+      }
+    },
+    {
+      "id": "r2r-0002",
+      "name": "R2R Health",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -250,
+        -250
+      ],
+      "webhookId": "r2r-0003",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "r2r/health",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0004",
+      "name": "Health OK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        50,
+        -250
+      ],
+      "parameters": {
+        "jsCode": "return [{json:{ok:true,service:'R2R Marketing Digital Automation OS',version:'3.0',time:new Date().toISOString()}}];"
+      }
+    },
+    {
+      "id": "r2r-0005",
+      "name": "SEÇÃO • SDR EVOLUTION",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        250
+      ],
+      "parameters": {
+        "content": "# Webhook principal Evolution API\nPOST /webhook/r2r/inbound-sales\n\nFiltra fromMe, grupos e duplicidade. Depois qualifica com IA e responde pela Evolution.",
+        "height": 420,
+        "width": 660
+      }
+    },
+    {
+      "id": "r2r-0006",
+      "name": "Evolution • Mensagem Recebida",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -250,
+        400
+      ],
+      "webhookId": "r2r-0007",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "r2r/inbound-sales",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0008",
+      "name": "Evolution • Normalizar e Anti Loop",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -10,
+        400
+      ],
+      "parameters": {
+        "jsCode": "\nconst b=$json.body??$json;\nconst d=b.data??b;\nconst key=d.key??{};\nconst fromMe=Boolean(key.fromMe??d.fromMe);\nconst remote=String(key.remoteJid??d.remoteJid??b.sender??'');\nif(fromMe) return [];\nif(remote.endsWith('@g.us')) return [];\nconst phone=remote.replace(/@s\\.whatsapp\\.net|@c\\.us/g,'').replace(/\\D/g,'');\nif(!phone) return [];\nconst msgId=String(key.id??d.messageId??b.id??'');\nconst m=d.message??b.message??{};\nconst text=String(\n  m.conversation ??\n  m.extendedTextMessage?.text ??\n  m.imageMessage?.caption ??\n  m.videoMessage?.caption ??\n  d.text ??\n  b.text ??\n  ''\n).trim();\nif(!text) return [];\nconst store=$getWorkflowStaticData('global');\nstore.msgIds=store.msgIds||{};\nif(msgId && store.msgIds[msgId]) return [];\nif(msgId) store.msgIds[msgId]=Date.now();\nconst cutoff=Date.now()-7*24*60*60*1000;\nfor(const [k,v] of Object.entries(store.msgIds)){ if(v<cutoff) delete store.msgIds[k]; }\nstore.contacts=store.contacts||{};\nconst c=store.contacts[phone]||{history:[],do_not_contact:false};\nconst low=text.toLowerCase();\nconst optout=/\\b(sair|pare|parar|remover|não quero|nao quero|cancelar)\\b/.test(low);\nif(optout) c.do_not_contact=true;\nconst history=(c.history||[]).slice(-8);\nstore.contacts[phone]=c;\nreturn [{json:{\n  phone,\n  name:String(d.pushName??b.pushName??''),\n  text,\n  message_id:msgId,\n  optout,\n  do_not_contact:Boolean(c.do_not_contact),\n  history,\n  received_at:new Date().toISOString()\n}}];\n"
+      }
+    },
+    {
+      "id": "r2r-0009",
+      "name": "Evolution • Gate Atendimento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        250,
+        400
+      ],
+      "parameters": {
+        "jsCode": "\nif($json.do_not_contact && !$json.optout) return [];\nreturn [{json:$json}];\n"
+      }
+    },
+    {
+      "id": "r2r-0010",
+      "name": "SDR • Montar Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        510,
+        400
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r2r-0011",
+              "name": "prompt",
+              "value": "=Você é o SDR da R2R Marketing Digital.\nServiços: Gestão de Tráfego Pago completa, Meta Ads, Google Ads, Curso de Tráfego Pago, Sites/Landing Pages, Criativos e Softwares.\n\nREGRAS OBRIGATÓRIAS:\n- Responda em português do Brasil.\n- Uma pergunta por resposta.\n- Máximo de 3 mensagens curtas, preferencialmente uma.\n- Não invente preço, prazo, resultado, case, disponibilidade ou condição.\n- Identifique objetivo, problema, urgência e serviço adequado.\n- Quando houver intenção real, conduza para uma reunião.\n- Se pedir humano, stage=handoff.\n- Se optout=true, responda confirmando a interrupção e stage=optout.\n- Sem pressão artificial ou promessa de resultado.\n- Retorne SOMENTE JSON válido:\n{\"reply\":\"...\",\"stage\":\"novo|qualificacao|reuniao|proposta|handoff|optout\",\"score\":0,\"service\":\"...\",\"crm_summary\":\"...\",\"next_action\":\"...\"}\n\nDADOS:\nNome: {{$json.name}}\nTelefone: {{$json.phone}}\nMensagem: {{$json.text}}\nOptout: {{$json.optout}}\nHistórico: {{JSON.stringify($json.history)}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0012",
+      "name": "SDR • IA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        770,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_AI_ENDPOINT}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.R2R_AI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify({\nmodel:$env.R2R_AI_MODEL || 'gpt-5.6',\nmessages:[\n {role:'system',content:'Você é o SDR da R2R. Retorne apenas JSON válido.'},\n {role:'user',content:$json.prompt}\n],\ntemperature:0.35\n})}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0013",
+      "name": "SDR • Interpretar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1030,
+        400
+      ],
+      "parameters": {
+        "jsCode": "\nlet raw=$json?.choices?.[0]?.message?.content ?? $json?.output_text ?? $json?.output ?? '{}';\nif(typeof raw!=='string') raw=JSON.stringify(raw);\nraw=raw.replace(/^\\`\\`\\`json\\s*/i,'').replace(/\\`\\`\\`$/,'').trim();\nlet v;\ntry{v=JSON.parse(raw);}catch{v={reply:'Recebi sua mensagem. Vou encaminhar para atendimento humano.',stage:'handoff',score:0,service:'',crm_summary:'Falha ao interpretar a resposta da IA',next_action:'humano'};}\nv.score=Math.max(0,Math.min(100,Number(v.score)||0));\nreturn [{json:v}];\n"
+      }
+    },
+    {
+      "id": "r2r-0014",
+      "name": "Evolution • Enviar Resposta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1290,
+        330
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.EVOLUTION_BASE_URL + '/message/sendText/' + $env.EVOLUTION_INSTANCE}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.EVOLUTION_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify({\nnumber:$('Evolution • Normalizar e Anti Loop').item.json.phone,\ntext:$json.reply\n})}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0015",
+      "name": "CRM Memória • Salvar Conversa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1550,
+        400
+      ],
+      "parameters": {
+        "jsCode": "\nconst src=$('Evolution • Normalizar e Anti Loop').item.json;\nconst ai=$('SDR • Interpretar').item.json;\nconst store=$getWorkflowStaticData('global');\nstore.contacts=store.contacts||{};\nconst c=store.contacts[src.phone]||{history:[],do_not_contact:false};\nc.do_not_contact=Boolean(src.do_not_contact||src.optout);\nc.stage=ai.stage;\nc.score=ai.score;\nc.service=ai.service;\nc.updated_at=new Date().toISOString();\nc.history=(c.history||[]).concat([\n {role:'user',text:src.text,at:src.received_at},\n {role:'assistant',text:ai.reply,at:new Date().toISOString()}\n]).slice(-20);\nstore.contacts[src.phone]=c;\nreturn [{json:{ok:true,phone:src.phone,stage:ai.stage,score:ai.score,next_action:ai.next_action}}];\n"
+      }
+    },
+    {
+      "id": "r2r-0016",
+      "name": "SEÇÃO • LEADS",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        950
+      ],
+      "parameters": {
+        "content": "# Entrada, normalização e qualificação de leads",
+        "height": 260,
+        "width": 560
+      }
+    },
+    {
+      "id": "r2r-0017",
+      "name": "Lead • Entrada Universal",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -250,
+        1050
+      ],
+      "webhookId": "r2r-0018",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "r2r/lead-intake",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0019",
+      "name": "Lead • Normalizar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -10,
+        1050
+      ],
+      "parameters": {
+        "jsCode": "\nconst b=$json.body??$json;\nconst phone=String(b.phone??b.whatsapp??'').replace(/\\D/g,'');\nconst email=String(b.email??'').trim().toLowerCase();\nconst key=phone||email||('lead-'+Date.now());\nconst store=$getWorkflowStaticData('global');\nstore.leads=store.leads||{};\nconst prev=store.leads[key]||{};\nconst lead={...prev,...b,lead_id:key,phone,email,status:prev.status||'novo',updated_at:new Date().toISOString()};\nstore.leads[key]=lead;\nreturn [{json:lead}];\n"
+      }
+    },
+    {
+      "id": "r2r-0020",
+      "name": "Lead • Prompt Score",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        250,
+        1050
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r2r-0021",
+              "name": "prompt",
+              "value": "=Você é analista de qualificação da R2R Marketing Digital.\nAvalie de 0 a 100 sem inventar dados.\nCritérios: problema claro 20; urgência 15; autoridade 15; capacidade/sinal de investimento 15; aderência ao serviço 20; intenção/engajamento 15.\nRetorne SOMENTE JSON:\n{\"score\":0,\"temperature\":\"frio|morno|quente\",\"service_fit\":\"...\",\"reason\":\"...\",\"next_action\":\"...\",\"missing\":[]}\nLEAD: {{JSON.stringify($json)}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0022",
+      "name": "Lead • IA Score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        510,
+        1050
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_AI_ENDPOINT}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.R2R_AI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify({\nmodel:$env.R2R_AI_MODEL || 'gpt-5.6',\nmessages:[{role:'system',content:'Somente JSON válido.'},{role:'user',content:$json.prompt}],\ntemperature:0.2\n})}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0023",
+      "name": "Lead • Salvar Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        770,
+        1050
+      ],
+      "parameters": {
+        "jsCode": "\nlet raw=$json?.choices?.[0]?.message?.content??$json?.output_text??'{}';\nif(typeof raw!=='string') raw=JSON.stringify(raw);\nraw=raw.replace(/^\\`\\`\\`json\\s*/i,'').replace(/\\`\\`\\`$/,'').trim();\nlet s={}; try{s=JSON.parse(raw)}catch{s={score:0,temperature:'frio',reason:'parse_error',next_action:'revisao_humana',missing:['parse_ai']}}\nconst lead=$('Lead • Normalizar').item.json;\nconst store=$getWorkflowStaticData('global');\nstore.leads=store.leads||{};\nstore.leads[lead.lead_id]={...lead,...s,updated_at:new Date().toISOString()};\nreturn [{json:{...lead,...s}}];\n"
+      }
+    },
+    {
+      "id": "r2r-0024",
+      "name": "SEÇÃO • PROSPECÇÃO 24H",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        1550
+      ],
+      "parameters": {
+        "content": "# Pesquisa pode rodar 24/7.\nEnvio deve respeitar consentimento, opt-out, janela e anti-duplicidade.",
+        "height": 330,
+        "width": 650
+      }
+    },
+    {
+      "id": "r2r-0025",
+      "name": "Prospecção • Pesquisa Horária",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -250,
+        1680
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "r2r-0026",
+      "name": "Prospecção • Buscar Candidatos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10,
+        1680
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.R2R_DATA_API + '/prospecting/candidates?limit=100'}}",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": false,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0027",
+      "name": "Prospecção • Higienizar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        270,
+        1680
+      ],
+      "parameters": {
+        "jsCode": "\nconst arr=Array.isArray($json)?$json:($json.items??[$json]);\nconst seen=new Set();\nreturn arr.filter(x=>{\n const k=String(x.phone||x.email||x.domain||x.company||'').trim().toLowerCase();\n if(!k||seen.has(k)||x.do_not_contact===true||x.status==='cliente') return false;\n seen.add(k); return true;\n}).map(x=>({json:{...x,research_status:'prequalificado',researched_at:new Date().toISOString()}}));\n"
+      }
+    },
+    {
+      "id": "r2r-0028",
+      "name": "Prospecção • Registrar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        530,
+        1680
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_DATA_API + '/prospecting/research-batch'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json)}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0029",
+      "name": "Contato • Fila a cada 10 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -250,
+        2070
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/10 * * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "r2r-0030",
+      "name": "Contato • Obter Fila",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10,
+        2070
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.R2R_DATA_API + '/outreach/queue?limit=10'}}",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": false,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0031",
+      "name": "Contato • Gate Compliance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        270,
+        2070
+      ],
+      "parameters": {
+        "jsCode": "\nconst arr=Array.isArray($json)?$json:($json.items??[$json]);\nconst now=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));\nconst hour=now.getHours();\nconst allowed=hour>=9&&hour<19;\nreturn arr.filter(x=>{\n if(x.do_not_contact===true||x.duplicate===true||!allowed) return false;\n if((x.channel||'').toLowerCase()==='whatsapp' && x.opt_in_whatsapp!==true) return false;\n return true;\n}).map(x=>({json:{...x,send_allowed:true,checked_at:new Date().toISOString()}}));\n"
+      }
+    },
+    {
+      "id": "r2r-0032",
+      "name": "Contato • Gateway",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        530,
+        2070
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_OUTREACH_WEBHOOK}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json)}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0033",
+      "name": "Contato • Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        790,
+        2070
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_DATA_API + '/outreach/log'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json)}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0034",
+      "name": "Follow-up • Diário",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -250,
+        2430
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "15 9 * * 1-6"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "r2r-0035",
+      "name": "Follow-up • Buscar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10,
+        2430
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.R2R_DATA_API + '/followups/due?limit=100'}}",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": false,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0036",
+      "name": "Follow-up • Priorizar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        270,
+        2430
+      ],
+      "parameters": {
+        "jsCode": "\nconst arr=Array.isArray($json)?$json:($json.items??[$json]);\nreturn arr.filter(x=>x.do_not_contact!==true&&x.status!=='cliente'&&x.status!=='perdido')\n.sort((a,b)=>(b.score||0)-(a.score||0))\n.map(x=>({json:{...x,followup_type:x.score>=70?'quente':x.score>=40?'morno':'nutricao'}}));\n"
+      }
+    },
+    {
+      "id": "r2r-0037",
+      "name": "Follow-up • Enfileirar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        530,
+        2430
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_DATA_API + '/outreach/enqueue'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json)}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0038",
+      "name": "SEÇÃO • VENDAS",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        2800
+      ],
+      "parameters": {
+        "content": "# Agenda, propostas e onboarding",
+        "height": 260,
+        "width": 520
+      }
+    },
+    {
+      "id": "r2r-0039",
+      "name": "Agenda • Solicitação",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -250,
+        2920
+      ],
+      "webhookId": "r2r-0040",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "r2r/book-meeting",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0041",
+      "name": "Agenda • Validar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -10,
+        2920
+      ],
+      "parameters": {
+        "jsCode": "\nconst b=$json.body??$json;\nif(!b.email&&!b.phone) throw new Error('Contato do lead ausente');\nreturn [{json:{\n name:b.name||'Lead R2R',email:b.email||'',phone:b.phone||'',\n preferred_times:b.preferred_times||[],duration_minutes:Number(b.duration_minutes||30),\n service_interest:b.service_interest||'',timezone:b.timezone||'America/Sao_Paulo'\n}}];\n"
+      }
+    },
+    {
+      "id": "r2r-0042",
+      "name": "Agenda • Integrar Calendar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        250,
+        2920
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_CALENDAR_WEBHOOK}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json)}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0043",
+      "name": "Proposta • Solicitação",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -250,
+        3270
+      ],
+      "webhookId": "r2r-0044",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "r2r/proposal",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0045",
+      "name": "Proposta • Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        10,
+        3270
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r2r-0046",
+              "name": "prompt",
+              "value": "=Crie uma proposta comercial profissional da R2R Marketing Digital em português.\nUse SOMENTE os dados recebidos. Não invente resultado, preço, case, garantia ou prazo.\nEstrutura: contexto, objetivo, escopo, entregáveis, responsabilidades, cronograma, investimento, condições, próximos passos.\nValor ausente = \"a definir\".\nRetorne SOMENTE JSON:\n{\"title\":\"...\",\"executive_summary\":\"...\",\"proposal_markdown\":\"...\",\"requires_human_approval\":true,\"missing_fields\":[]}\nDADOS: {{JSON.stringify($json.body??$json)}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0047",
+      "name": "Proposta • IA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        270,
+        3270
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_AI_ENDPOINT}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.R2R_AI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify({\nmodel:$env.R2R_AI_MODEL || 'gpt-5.6',\nmessages:[{role:'system',content:'Somente JSON válido. Não invente fatos.'},{role:'user',content:$json.prompt}],\ntemperature:0.3\n})}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0048",
+      "name": "Proposta • Interpretar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        530,
+        3270
+      ],
+      "parameters": {
+        "jsCode": "\nlet raw=$json?.choices?.[0]?.message?.content??$json?.output_text??'{}';\nif(typeof raw!=='string') raw=JSON.stringify(raw);\nraw=raw.replace(/^\\`\\`\\`json\\s*/i,'').replace(/\\`\\`\\`$/,'').trim();\nlet v; try{v=JSON.parse(raw)}catch{v={title:'Proposta R2R',proposal_markdown:raw,requires_human_approval:true,missing_fields:['parse_ai']}}\nv.status='aguardando_aprovacao';\nv.generated_at=new Date().toISOString();\nreturn [{json:v}];\n"
+      }
+    },
+    {
+      "id": "r2r-0049",
+      "name": "Onboarding • Novo Cliente",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -250,
+        3620
+      ],
+      "webhookId": "r2r-0050",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "r2r/client-onboarding",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0051",
+      "name": "Onboarding • Checklist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -10,
+        3620
+      ],
+      "parameters": {
+        "jsCode": "\nconst b=$json.body??$json;\nconst svc=String(b.service||'').toLowerCase();\nconst common=['Contrato assinado','Contato financeiro','Responsável do cliente','Objetivo principal'];\nconst map={\n 'meta ads':['BM/Portfólio empresarial','Conta de anúncios','Pixel/CAPI','Página Facebook','Instagram','Forma de pagamento','Oferta e público'],\n 'google ads':['Google Ads','GA4','GTM','Search Console','Conversões','Landing page'],\n 'site':['Domínio','DNS','Hospedagem','Logo/identidade','Textos','Fotos','WhatsApp','Política de privacidade'],\n 'software':['Escopo aprovado','Usuários/perfis','Domínio','Banco','Integrações','Critérios de aceite','Backup'],\n 'curso':['Dados do aluno','Data/turma','Material','Acesso']\n};\nlet specific=[]; for(const [k,v] of Object.entries(map)) if(svc.includes(k)) specific.push(...v);\nreturn [{json:{...b,checklist:[...common,...specific],onboarding_status:'aberto',created_at:new Date().toISOString()}}];\n"
+      }
+    },
+    {
+      "id": "r2r-0052",
+      "name": "Onboarding • Criar Projeto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        250,
+        3620
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_DATA_API + '/clients/onboard'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json)}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0053",
+      "name": "Conteúdo • Briefing",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -250,
+        3970
+      ],
+      "webhookId": "r2r-0054",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "r2r/content-brief",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0055",
+      "name": "Conteúdo • Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        10,
+        3970
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r2r-0056",
+              "name": "prompt",
+              "value": "=Você é o núcleo de conteúdo da R2R Marketing Digital.\nCrie conteúdo a partir do briefing. Não invente depoimentos, números, provas ou resultados.\nRetorne SOMENTE JSON:\n{\"angle\":\"...\",\"headline\":\"...\",\"primary_text\":\"...\",\"cta\":\"...\",\"creative_brief\":\"...\",\"variants\":[{\"headline\":\"...\",\"text\":\"...\"}],\"compliance_notes\":[]}\nBRIEFING: {{JSON.stringify($json.body??$json)}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0057",
+      "name": "Conteúdo • IA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        270,
+        3970
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_AI_ENDPOINT}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.R2R_AI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify({\nmodel:$env.R2R_AI_MODEL || 'gpt-5.6',\nmessages:[{role:'system',content:'Somente JSON válido.'},{role:'user',content:$json.prompt}],\ntemperature:0.7\n})}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0058",
+      "name": "SEÇÃO • GESTÃO",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        4350
+      ],
+      "parameters": {
+        "content": "# Performance, retenção e relatório executivo",
+        "height": 300,
+        "width": 580
+      }
+    },
+    {
+      "id": "r2r-0059",
+      "name": "Performance • Análise Diária",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -250,
+        4490
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 7 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "r2r-0060",
+      "name": "Performance • Buscar Métricas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10,
+        4490
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.R2R_DATA_API + '/marketing/daily-metrics'}}",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": false,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0061",
+      "name": "Performance • Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        270,
+        4490
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r2r-0062",
+              "name": "prompt",
+              "value": "=Você é analista sênior de performance da R2R.\nAnalise SOMENTE os dados fornecidos. Não invente métricas.\nSepare Meta Ads, Google Ads e funil comercial.\nRetorne SOMENTE JSON:\n{\"summary\":\"...\",\"alerts\":[],\"recommendations\":[],\"requires_human_action\":[],\"data_quality_issues\":[]}\nDADOS: {{JSON.stringify($json)}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0063",
+      "name": "Performance • IA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        530,
+        4490
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_AI_ENDPOINT}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.R2R_AI_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify({\nmodel:$env.R2R_AI_MODEL || 'gpt-5.6',\nmessages:[{role:'system',content:'Somente JSON válido.'},{role:'user',content:$json.prompt}],\ntemperature:0.2\n})}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0064",
+      "name": "Performance • Notificar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        790,
+        4490
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_NOTIFY_WEBHOOK}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json)}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0065",
+      "name": "CS • Clientes em Risco",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -250,
+        4840
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "r2r-0066",
+      "name": "CS • Buscar Saúde",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10,
+        4840
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.R2R_DATA_API + '/clients/health'}}",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": false,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0067",
+      "name": "CS • Classificar Risco",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        270,
+        4840
+      ],
+      "parameters": {
+        "jsCode": "\nconst arr=Array.isArray($json)?$json:($json.items??[$json]);\nreturn arr.map(c=>{\n let risk=0;\n if((c.days_since_contact||0)>7)risk+=20;\n if(c.payment_overdue===true)risk+=30;\n if((c.performance_alerts||0)>2)risk+=20;\n if((c.open_support_issues||0)>0)risk+=15;\n if(c.nps!=null&&c.nps<7)risk+=20;\n return {json:{...c,risk_score:Math.min(100,risk),risk_level:risk>=60?'alto':risk>=30?'medio':'baixo'}};\n});\n"
+      }
+    },
+    {
+      "id": "r2r-0068",
+      "name": "CS • Notificar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        530,
+        4840
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_NOTIFY_WEBHOOK}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json)}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0069",
+      "name": "Relatório • Executivo Diário",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -250,
+        5190
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 20 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "r2r-0070",
+      "name": "Relatório • Buscar KPIs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        10,
+        5190
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.R2R_DATA_API + '/reports/executive-daily'}}",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": false,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0071",
+      "name": "Relatório • Formatar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        270,
+        5190
+      ],
+      "parameters": {
+        "jsCode": "\nconst d=$json;\nconst lines=[\n'📊 R2R • Fechamento do dia',\n'Leads novos: '+(d.new_leads??0),\n'Leads quentes: '+(d.hot_leads??0),\n'Contatos enviados: '+(d.outreach_sent??0),\n'Respostas: '+(d.replies??0),\n'Reuniões agendadas: '+(d.meetings??0),\n'Propostas: '+(d.proposals??0),\n'Vendas: '+(d.sales??0),\n'Receita fechada: R$ '+Number(d.closed_revenue??0).toLocaleString('pt-BR',{minimumFractionDigits:2}),\n'MRR: R$ '+Number(d.mrr??0).toLocaleString('pt-BR',{minimumFractionDigits:2}),\n'Clientes em risco: '+(d.clients_at_risk??0),\n'Falhas de automação: '+(d.automation_errors??0)\n];\nreturn [{json:{...d,formatted:lines.join('\\n'),generated_at:new Date().toISOString()}}];\n"
+      }
+    },
+    {
+      "id": "r2r-0072",
+      "name": "Relatório • Enviar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        530,
+        5190
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_NOTIFY_WEBHOOK}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json)}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0073",
+      "name": "Erro • Recebido",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -250,
+        5540
+      ],
+      "webhookId": "r2r-0074",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "r2r/error-handler",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "r2r-0075",
+      "name": "Erro • Normalizar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -10,
+        5540
+      ],
+      "parameters": {
+        "jsCode": "\nconst e=$json.body??$json;\nreturn [{json:{\nseverity:e.severity||'error',\nworkflow:e.workflow||e.workflowName||'unknown',\nexecution_id:e.execution_id||e.executionId||'',\nnode:e.node||e.lastNodeExecuted||'',\nmessage:e.message||e.error?.message||JSON.stringify(e.error||e),\noccurred_at:new Date().toISOString()\n}}];\n"
+      }
+    },
+    {
+      "id": "r2r-0076",
+      "name": "Erro • Alertar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        250,
+        5540
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.R2R_NOTIFY_WEBHOOK}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{JSON.stringify($json)}}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "r2r-0077",
+      "name": "R2R • CONFIGURAÇÃO",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -1000
+      ],
+      "parameters": {
+        "content": "## Variáveis obrigatórias no EasyPanel/n8n\nR2R_AI_ENDPOINT\nR2R_AI_API_KEY\nR2R_AI_MODEL\nR2R_DATA_API\nR2R_NOTIFY_WEBHOOK\nR2R_OUTREACH_WEBHOOK\nR2R_CALENDAR_WEBHOOK\nEVOLUTION_BASE_URL\nEVOLUTION_INSTANCE\nEVOLUTION_API_KEY\n\nWebhook Evolution: /webhook/r2r/inbound-sales\nHealth: /webhook/r2r/health\n\nSem segredos dentro do JSON.",
+        "height": 520,
+        "width": 740
+      }
+    }
+  ],
+  "connections": {
+    "R2R Health": {
+      "main": [
+        [
+          {
+            "node": "Health OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution • Mensagem Recebida": {
+      "main": [
+        [
+          {
+            "node": "Evolution • Normalizar e Anti Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution • Normalizar e Anti Loop": {
+      "main": [
+        [
+          {
+            "node": "Evolution • Gate Atendimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution • Gate Atendimento": {
+      "main": [
+        [
+          {
+            "node": "SDR • Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SDR • Montar Prompt": {
+      "main": [
+        [
+          {
+            "node": "SDR • IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SDR • IA": {
+      "main": [
+        [
+          {
+            "node": "SDR • Interpretar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SDR • Interpretar": {
+      "main": [
+        [
+          {
+            "node": "Evolution • Enviar Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution • Enviar Resposta": {
+      "main": [
+        [
+          {
+            "node": "CRM Memória • Salvar Conversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead • Entrada Universal": {
+      "main": [
+        [
+          {
+            "node": "Lead • Normalizar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead • Normalizar": {
+      "main": [
+        [
+          {
+            "node": "Lead • Prompt Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead • Prompt Score": {
+      "main": [
+        [
+          {
+            "node": "Lead • IA Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead • IA Score": {
+      "main": [
+        [
+          {
+            "node": "Lead • Salvar Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prospecção • Pesquisa Horária": {
+      "main": [
+        [
+          {
+            "node": "Prospecção • Buscar Candidatos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prospecção • Buscar Candidatos": {
+      "main": [
+        [
+          {
+            "node": "Prospecção • Higienizar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prospecção • Higienizar": {
+      "main": [
+        [
+          {
+            "node": "Prospecção • Registrar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contato • Fila a cada 10 min": {
+      "main": [
+        [
+          {
+            "node": "Contato • Obter Fila",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contato • Obter Fila": {
+      "main": [
+        [
+          {
+            "node": "Contato • Gate Compliance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contato • Gate Compliance": {
+      "main": [
+        [
+          {
+            "node": "Contato • Gateway",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contato • Gateway": {
+      "main": [
+        [
+          {
+            "node": "Contato • Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Follow-up • Diário": {
+      "main": [
+        [
+          {
+            "node": "Follow-up • Buscar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Follow-up • Buscar": {
+      "main": [
+        [
+          {
+            "node": "Follow-up • Priorizar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Follow-up • Priorizar": {
+      "main": [
+        [
+          {
+            "node": "Follow-up • Enfileirar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agenda • Solicitação": {
+      "main": [
+        [
+          {
+            "node": "Agenda • Validar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agenda • Validar": {
+      "main": [
+        [
+          {
+            "node": "Agenda • Integrar Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proposta • Solicitação": {
+      "main": [
+        [
+          {
+            "node": "Proposta • Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proposta • Prompt": {
+      "main": [
+        [
+          {
+            "node": "Proposta • IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proposta • IA": {
+      "main": [
+        [
+          {
+            "node": "Proposta • Interpretar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Onboarding • Novo Cliente": {
+      "main": [
+        [
+          {
+            "node": "Onboarding • Checklist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Onboarding • Checklist": {
+      "main": [
+        [
+          {
+            "node": "Onboarding • Criar Projeto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conteúdo • Briefing": {
+      "main": [
+        [
+          {
+            "node": "Conteúdo • Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conteúdo • Prompt": {
+      "main": [
+        [
+          {
+            "node": "Conteúdo • IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Performance • Análise Diária": {
+      "main": [
+        [
+          {
+            "node": "Performance • Buscar Métricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Performance • Buscar Métricas": {
+      "main": [
+        [
+          {
+            "node": "Performance • Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Performance • Prompt": {
+      "main": [
+        [
+          {
+            "node": "Performance • IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Performance • IA": {
+      "main": [
+        [
+          {
+            "node": "Performance • Notificar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CS • Clientes em Risco": {
+      "main": [
+        [
+          {
+            "node": "CS • Buscar Saúde",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CS • Buscar Saúde": {
+      "main": [
+        [
+          {
+            "node": "CS • Classificar Risco",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CS • Classificar Risco": {
+      "main": [
+        [
+          {
+            "node": "CS • Notificar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relatório • Executivo Diário": {
+      "main": [
+        [
+          {
+            "node": "Relatório • Buscar KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relatório • Buscar KPIs": {
+      "main": [
+        [
+          {
+            "node": "Relatório • Formatar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relatório • Formatar": {
+      "main": [
+        [
+          {
+            "node": "Relatório • Enviar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Erro • Recebido": {
+      "main": [
+        [
+          {
+            "node": "Erro • Normalizar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Erro • Normalizar": {
+      "main": [
+        [
+          {
+            "node": "Erro • Alertar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "r2rPackageVersion": "3.0"
+  },
+  "tags": []
+}
