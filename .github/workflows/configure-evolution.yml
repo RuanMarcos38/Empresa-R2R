@@ -22,9 +22,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configurar webhook da Evolution API
+        if: ${{ secrets.EVOLUTION_API_KEY != '' }}
         env:
           EVOLUTION_API_KEY: ${{ secrets.EVOLUTION_API_KEY }}
           EVOLUTION_BASE_URL: https://evolution-evolution-api.ke4n49.easypanel.host
           EVOLUTION_INSTANCE: R2R Marketing Digital
           N8N_WEBHOOK_URL: https://n8n-n8n.ke4n49.easypanel.host/webhook/r2r/inbound-sales
         run: bash scripts/configure-evolution.sh
+
+      - name: Aviso quando não há Evolution key
+        if: ${{ secrets.EVOLUTION_API_KEY == '' }}
+        run: echo "EVOLUTION_API_KEY não configurada; etapa de configuração automática ignorada."
