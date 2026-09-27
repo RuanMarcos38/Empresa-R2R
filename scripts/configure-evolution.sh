@@ -22,16 +22,27 @@ if [[ "$STATE" != "open" ]]; then
   exit 1
 fi
 
-echo "2/4 Configurando webhook MESSAGES_UPSERT..."
-curl -fsS -X POST   -H "apikey: $EVOLUTION_API_KEY"   -H "Content-Type: application/json"   --data-binary @-   "$EVOLUTION_BASE_URL/webhook/set/$ENCODED_INSTANCE" <<JSON
+echo "2/4 Configurando webhook MESSAGES_UPSERT (Evolution 2.3.7)..."
+HTTP_CODE="$(curl -sS -o /tmp/evolution-webhook-set.json -w "%{http_code}" -X POST   -H "apikey: $EVOLUTION_API_KEY"   -H "Content-Type: application/json"   --data-binary @-   "$EVOLUTION_BASE_URL/webhook/set/$ENCODED_INSTANCE" <<JSON
 {
-  "enabled": true,
-  "url": "$N8N_WEBHOOK_URL",
-  "webhookByEvents": false,
-  "webhookBase64": false,
-  "events": ["MESSAGES_UPSERT"]
+  "webhook": {
+    "enabled": true,
+    "url": "$N8N_WEBHOOK_URL",
+    "byEvents": false,
+    "base64": false,
+    "events": ["MESSAGES_UPSERT"]
+  }
 }
 JSON
+)"
+
+cat /tmp/evolution-webhook-set.json || true
+echo
+
+if [[ "$HTTP_CODE" != "200" && "$HTTP_CODE" != "201" ]]; then
+  echo "Falha ao configurar webhook da Evolution. HTTP $HTTP_CODE"
+  exit 1
+fi
 
 echo "3/4 Conferindo webhook..."
 curl -fsS   -H "apikey: $EVOLUTION_API_KEY"   "$EVOLUTION_BASE_URL/webhook/find/$ENCODED_INSTANCE"   | tee /tmp/evolution-webhook.json
@@ -43,7 +54,8 @@ if [[ "$CONFIG_URL" != "$N8N_WEBHOOK_URL" ]]; then
 fi
 
 echo "4/4 Testando healthcheck do n8n..."
-curl -fsS "https://n8n-n8n.ke4n49.easypanel.host/webhook/r2r/health" | tee /tmp/r2r-health.json
+curl -fsS --max-time 20   "https://n8n-n8n.ke4n49.easypanel.host/webhook/r2r/health"   | tee /tmp/r2r-health.json
+
 jq -e '.ok == true' /tmp/r2r-health.json >/dev/null
 
 echo "Evolution API configurada com sucesso."
