@@ -28,7 +28,12 @@ jobs:
           echo "JSON válido."
 
       - name: Deploy no n8n do EasyPanel
+        if: ${{ secrets.N8N_API_KEY != '' }}
         env:
           N8N_BASE_URL: https://n8n-n8n.ke4n49.easypanel.host
           N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
         run: bash scripts/deploy-n8n.sh n8n/R2R_MASTER.json
+
+      - name: Aviso quando não há API key
+        if: ${{ secrets.N8N_API_KEY == '' }}
+        run: echo "N8N_API_KEY não configurada; JSON validado e deploy automático ignorado."
