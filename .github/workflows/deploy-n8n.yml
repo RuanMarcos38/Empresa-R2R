@@ -1,0 +1,34 @@
+name: Deploy R2R Master no n8n
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "n8n/R2R_MASTER.json"
+      - "scripts/deploy-n8n.sh"
+      - ".github/workflows/deploy-n8n.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: r2r-n8n-production
+  cancel-in-progress: false
+
+jobs:
+  validate-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validar JSON
+        run: |
+          jq -e '.name and (.nodes | type == "array") and (.connections | type == "object")' n8n/R2R_MASTER.json >/dev/null
+          echo "JSON válido."
+
+      - name: Deploy no n8n do EasyPanel
+        env:
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+        run: bash scripts/deploy-n8n.sh n8n/R2R_MASTER.json
