@@ -185,7 +185,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.EVOLUTION_BASE_URL + '/message/sendText/' + $env.EVOLUTION_INSTANCE}}",
+        "url": "=https://evolution-evolution-api.ke4n49.easypanel.host/message/sendText/{{ encodeURIComponent('R2R Marketing Digital') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -202,7 +202,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{JSON.stringify({\nnumber:$('Evolution • Normalizar e Anti Loop').item.json.phone,\ntext:$json.reply\n})}}",
+        "body": "={{JSON.stringify({\nnumber:$('Evolution • Normalizar e Anti Loop').item.json.phone,\ntext:$json.reply,\ndelay:1200,\nlinkPreview:false\n})}}",
         "options": {
           "timeout": 30000
         }
@@ -499,7 +499,7 @@
     },
     {
       "id": "r2r-0032",
-      "name": "Contato • Gateway",
+      "name": "Contato • Evolution Enviar",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -508,10 +508,14 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.R2R_OUTREACH_WEBHOOK}}",
+        "url": "=https://evolution-evolution-api.ke4n49.easypanel.host/message/sendText/{{ encodeURIComponent('R2R Marketing Digital') }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.EVOLUTION_API_KEY}}"
+            },
             {
               "name": "Content-Type",
               "value": "application/json"
@@ -521,7 +525,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{JSON.stringify($json)}}",
+        "body": "={{JSON.stringify({\nnumber:String($json.phone || $json.whatsapp || '').replace(/\\D/g,''),\ntext:String($json.message || $json.text || ''),\ndelay:1200,\nlinkPreview:false\n})}}",
         "options": {
           "timeout": 30000
         }
@@ -1334,7 +1338,7 @@
         -1000
       ],
       "parameters": {
-        "content": "## Variáveis obrigatórias no EasyPanel/n8n\nR2R_AI_ENDPOINT\nR2R_AI_API_KEY\nR2R_AI_MODEL\nR2R_DATA_API\nR2R_NOTIFY_WEBHOOK\nR2R_OUTREACH_WEBHOOK\nR2R_CALENDAR_WEBHOOK\nEVOLUTION_BASE_URL\nEVOLUTION_INSTANCE\nEVOLUTION_API_KEY\n\nWebhook Evolution: /webhook/r2r/inbound-sales\nHealth: /webhook/r2r/health\n\nSem segredos dentro do JSON.",
+        "content": "## R2R + Evolution API\nEvolution Base URL:\nhttps://evolution-evolution-api.ke4n49.easypanel.host\n\nInstância:\nR2R Marketing Digital\n\nWebhook principal:\nhttps://n8n-n8n.ke4n49.easypanel.host/webhook/r2r/inbound-sales\n\n### Segredos obrigatórios no ambiente\nEVOLUTION_API_KEY\nR2R_AI_ENDPOINT\nR2R_AI_API_KEY\nR2R_AI_MODEL\nR2R_DATA_API\nR2R_NOTIFY_WEBHOOK\nR2R_CALENDAR_WEBHOOK\n\nO token Evolution nunca fica salvo neste JSON/repositório público.",
         "height": 520,
         "width": 740
       }
@@ -1532,18 +1536,7 @@
       "main": [
         [
           {
-            "node": "Contato • Gateway",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Contato • Gateway": {
-      "main": [
-        [
-          {
-            "node": "Contato • Log",
+            "node": "Contato • Evolution Enviar",
             "type": "main",
             "index": 0
           }
@@ -1813,6 +1806,17 @@
           }
         ]
       ]
+    },
+    "Contato • Evolution Enviar": {
+      "main": [
+        [
+          {
+            "node": "Contato • Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -1826,7 +1830,7 @@
   "staticData": null,
   "meta": {
     "templateCredsSetupCompleted": false,
-    "r2rPackageVersion": "3.0"
+    "r2rPackageVersion": "3.1-evolution"
   },
   "tags": []
 }
