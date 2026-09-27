@@ -632,11 +632,6 @@
           "description": "={{ 'Interesse: ' + ($json.service_interest || 'A definir') + '\\nTelefone: ' + ($json.phone || '') + '\\nEmail: ' + ($json.email || '') }}",
           "attendees": "={{ $json.email || '' }}"
         }
-      },
-      "credentials": {
-        "googleCalendarOAuth2Api": {
-          "name": "R2R Google Calendar"
-        }
       }
     },
     {
