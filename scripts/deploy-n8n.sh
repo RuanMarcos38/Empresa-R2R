@@ -20,7 +20,23 @@ trap 'rm -f "$PAYLOAD" /tmp/n8n-workflows.json /tmp/n8n-response.json /tmp/n8n-a
 jq '{name,nodes,connections,settings,staticData}' "$FILE" > "$PAYLOAD"
 
 echo "Buscando workflow: $NAME"
-curl -fsS   -H "X-N8N-API-KEY: $N8N_API_KEY"   "$BASE/api/v1/workflows?limit=250" > /tmp/n8n-workflows.json
+HTTP_CODE="$(curl -sS -o /tmp/n8n-workflows.json -w "%{http_code}" \
+  -H "X-N8N-API-KEY: $N8N_API_KEY" \
+  "$BASE/api/v1/workflows?limit=250")"
+
+if [[ "$HTTP_CODE" == "404" ]]; then
+  echo "A API pública do n8n retornou 404."
+  echo "No EasyPanel > n8n > Ambiente, confirme:"
+  echo "N8N_PUBLIC_API_DISABLED=false"
+  echo "N8N_PUBLIC_API_ENDPOINT=api"
+  exit 1
+fi
+
+if [[ "$HTTP_CODE" != "200" ]]; then
+  echo "Falha ao consultar a API do n8n. HTTP $HTTP_CODE"
+  cat /tmp/n8n-workflows.json 2>/dev/null || true
+  exit 1
+fi
 
 ID="$(jq -r --arg n "$NAME" '.data[]? | select(.name==$n) | .id' /tmp/n8n-workflows.json | head -n1)"
 
