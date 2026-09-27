@@ -1,46 +1,64 @@
-# Empresa-R2R — Automação da R2R Marketing Digital
+# Empresa-R2R — Automação R2R Marketing Digital
 
-Este repositório mantém o workflow mestre da operação automatizada da R2R.
+Repositório oficial do workflow mestre da R2R.
 
-## Arquivos principais
+## Produção
 
-- `n8n/R2R_MASTER.json` — workflow mestre do n8n.
-- `.github/workflows/deploy-n8n.yml` — CI/CD que atualiza a instância n8n no EasyPanel após push em `main`.
-- `scripts/deploy-n8n.sh` — upsert, ativação e healthcheck do workflow.
-- `.env.example` — variáveis exigidas sem nenhum segredo.
-
-## n8n em produção
-
-Base URL:
+n8n:
 `https://n8n-n8n.ke4n49.easypanel.host`
 
-Webhook principal da Evolution API:
+Evolution API:
+`https://evolution-evolution-api.ke4n49.easypanel.host`
+
+Instância:
+`R2R Marketing Digital`
+
+Webhook principal da Evolution:
 `POST https://n8n-n8n.ke4n49.easypanel.host/webhook/r2r/inbound-sales`
 
 Healthcheck:
 `GET https://n8n-n8n.ke4n49.easypanel.host/webhook/r2r/health`
 
-## Atualização automática
+## Integração Evolution incluída
 
-O GitHub Actions faz:
+O workflow mestre contém:
+- recebimento de `MESSAGES_UPSERT`;
+- filtro de mensagens `fromMe`;
+- bloqueio de grupos;
+- anti-loop e anti-duplicidade por messageId;
+- opt-out;
+- SDR com IA;
+- memória de conversa;
+- resposta automática via `/message/sendText/{instance}`;
+- envio outbound pela Evolution com gate de compliance;
+- delays de envio;
+- logs e healthcheck.
 
-1. validação do JSON;
-2. busca do workflow por nome;
-3. criação ou atualização via API do n8n;
-4. reativação para registrar os webhooks;
-5. healthcheck de produção.
+## Automação do webhook Evolution
 
-### GitHub Secrets obrigatórios
+O arquivo `scripts/configure-evolution.sh`:
+1. valida o estado da instância;
+2. exige estado `open`;
+3. configura `MESSAGES_UPSERT`;
+4. aponta para o webhook do n8n;
+5. consulta a configuração gravada;
+6. testa o healthcheck da R2R.
 
-- `N8N_BASE_URL` = `https://n8n-n8n.ke4n49.easypanel.host`
-- `N8N_API_KEY` = API key criada na sua instância n8n.
+## GitHub Secrets obrigatórios
 
-## Variáveis no serviço n8n do EasyPanel
+Em **Settings → Secrets and variables → Actions** crie:
 
-Configure as variáveis listadas em `.env.example` no serviço **n8n** do EasyPanel.
+### N8N_API_KEY
+API key da instância n8n. Usada apenas para publicar/atualizar o workflow.
 
-> Segurança: este repositório é público. Tokens, senhas e API keys nunca devem ser gravados em arquivos versionados.
+### EVOLUTION_API_KEY
+Token/API key privado da instância Evolution. Usado para configurar o webhook e autenticar as chamadas.
 
-## Regra de infraestrutura
+Não grave esses valores em arquivos: este repositório é público.
 
-Se houver mais de um componente n8n (main/runner/worker/webhook), todos devem usar a mesma versão do n8n. A documentação oficial recomenda atualizar os componentes conjuntamente para evitar incompatibilidades de protocolo.
+## GitHub Actions
+
+- `Deploy R2R Master no n8n`: valida, cria/atualiza, ativa e testa o workflow.
+- `Configurar Evolution API`: verifica a conexão, grava o webhook e confirma a configuração.
+
+Depois de criar os dois Secrets, abra **Actions** e execute novamente os dois workflows. A partir daí, alterações futuras no workflow são publicadas automaticamente.
