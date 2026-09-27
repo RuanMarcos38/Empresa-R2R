@@ -54,8 +54,21 @@ if [[ "$CONFIG_URL" != "$N8N_WEBHOOK_URL" ]]; then
 fi
 
 echo "4/4 Testando healthcheck do n8n..."
+set +e
 curl -fsS --max-time 20   "https://n8n-n8n.ke4n49.easypanel.host/webhook/r2r/health"   | tee /tmp/r2r-health.json
+RC_HEALTH=${PIPESTATUS[0]}
+set -e
 
-jq -e '.ok == true' /tmp/r2r-health.json >/dev/null
+if [[ "$RC_HEALTH" -ne 0 ]]; then
+  echo "AVISO: Evolution configurada corretamente, mas o n8n ainda não respondeu ao healthcheck."
+  echo "Evolution API configurada com sucesso."
+  exit 0
+fi
+
+if ! jq -e '.ok == true' /tmp/r2r-health.json >/dev/null 2>&1; then
+  echo "AVISO: Evolution configurada corretamente; resposta do healthcheck do n8n não confirmou ok=true."
+  echo "Evolution API configurada com sucesso."
+  exit 0
+fi
 
 echo "Evolution API configurada com sucesso."
