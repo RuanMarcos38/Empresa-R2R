@@ -35,8 +35,15 @@ else
   STATUS_EVOLUTION="missing_secret"
 fi
 
-export R2R_DEPLOY_N8N_STATUS="$STATUS_N8N"
-export R2R_EVOLUTION_STATUS="$STATUS_EVOLUTION"
+mkdir -p /app/public
+cat > /app/public/status.json <<JSON
+{
+  "ok": true,
+  "service": "R2R Marketing Digital Deploy Agent",
+  "n8n_deploy": "$STATUS_N8N",
+  "evolution": "$STATUS_EVOLUTION"
+}
+JSON
 
 echo "Agente ativo na porta ${PORT:-3000}"
-exec python /app/health_server.py
+exec python -m http.server "${PORT:-3000}" --directory /app/public
