@@ -1,5 +1,5 @@
 {
-  "name": "R2R MARKETING DIGITAL • MASTER OS • PRODUÇÃO",
+  "name": "R2R MARKETING DIGITAL • MASTER OS • AUTOSSUFICIENTE v4",
   "nodes": [
     {
       "id": "r2r-0001",
@@ -138,7 +138,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.R2R_AI_ENDPOINT}}",
+        "url": "https://api.openai.com/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -300,7 +300,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.R2R_AI_ENDPOINT}}",
+        "url": "https://api.openai.com/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -374,26 +374,14 @@
     {
       "id": "r2r-0026",
       "name": "Prospecção • Buscar Candidatos",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         10,
         1680
       ],
       "parameters": {
-        "method": "GET",
-        "url": "={{$env.R2R_DATA_API + '/prospecting/candidates?limit=100'}}",
-        "sendHeaders": false,
-        "headerParameters": {
-          "parameters": []
-        },
-        "sendBody": false,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "const store=$getWorkflowStaticData('global');\nstore.leads=store.leads||{};\nstore.outreachLog=store.outreachLog||[];\nconst already=new Set(store.outreachLog.map(x=>String(x.lead_id||x.phone||x.email||'')));\nconst values=Object.values(store.leads)\n  .filter(x=>x && x.do_not_contact!==true && x.status!=='cliente')\n  .filter(x=>!already.has(String(x.lead_id||x.phone||x.email||'')))\n  .sort((a,b)=>(b.score||0)-(a.score||0))\n  .slice(0,100);\nreturn values.map(x=>({json:x}));"
       }
     },
     {
@@ -412,31 +400,14 @@
     {
       "id": "r2r-0028",
       "name": "Prospecção • Registrar",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         530,
         1680
       ],
       "parameters": {
-        "method": "POST",
-        "url": "={{$env.R2R_DATA_API + '/prospecting/research-batch'}}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "={{JSON.stringify($json)}}",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "const store=$getWorkflowStaticData('global');\nstore.outreachQueue=store.outreachQueue||[];\nconst items=$input.all().map(i=>i.json);\nconst existing=new Set(store.outreachQueue.map(x=>String(x.lead_id||x.phone||x.email||'')));\nfor(const x of items){\n  const key=String(x.lead_id||x.phone||x.email||'');\n  if(!key||existing.has(key)||x.do_not_contact===true) continue;\n  store.outreachQueue.push({...x,queued_at:new Date().toISOString(),status:'queued'});\n  existing.add(key);\n}\nreturn [{json:{queued:items.length,total_queue:store.outreachQueue.length}}];"
       }
     },
     {
@@ -462,26 +433,14 @@
     {
       "id": "r2r-0030",
       "name": "Contato • Obter Fila",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         10,
         2070
       ],
       "parameters": {
-        "method": "GET",
-        "url": "={{$env.R2R_DATA_API + '/outreach/queue?limit=10'}}",
-        "sendHeaders": false,
-        "headerParameters": {
-          "parameters": []
-        },
-        "sendBody": false,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "const store=$getWorkflowStaticData('global');\nstore.outreachQueue=store.outreachQueue||[];\nconst batch=store.outreachQueue\n  .filter(x=>x.status==='queued' && x.do_not_contact!==true)\n  .slice(0,10);\nreturn batch.map(x=>({json:x}));"
       }
     },
     {
@@ -534,31 +493,14 @@
     {
       "id": "r2r-0033",
       "name": "Contato • Log",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         790,
         2070
       ],
       "parameters": {
-        "method": "POST",
-        "url": "={{$env.R2R_DATA_API + '/outreach/log'}}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "={{JSON.stringify($json)}}",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "const store=$getWorkflowStaticData('global');\nstore.outreachQueue=store.outreachQueue||[];\nstore.outreachLog=store.outreachLog||[];\nconst sent=$json;\nconst key=String(sent.lead_id||sent.phone||sent.email||'');\nconst row=store.outreachQueue.find(x=>String(x.lead_id||x.phone||x.email||'')===key);\nif(row){ row.status='sent'; row.sent_at=new Date().toISOString(); }\nstore.outreachLog.push({...sent,logged_at:new Date().toISOString()});\nreturn [{json:{ok:true,key,total_sent:store.outreachLog.length}}];"
       }
     },
     {
@@ -584,26 +526,14 @@
     {
       "id": "r2r-0035",
       "name": "Follow-up • Buscar",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         10,
         2430
       ],
       "parameters": {
-        "method": "GET",
-        "url": "={{$env.R2R_DATA_API + '/followups/due?limit=100'}}",
-        "sendHeaders": false,
-        "headerParameters": {
-          "parameters": []
-        },
-        "sendBody": false,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "const store=$getWorkflowStaticData('global');\nstore.leads=store.leads||{};\nconst now=Date.now();\nconst due=Object.values(store.leads).filter(x=>{\n  if(!x||x.do_not_contact===true||x.status==='cliente'||x.status==='perdido') return false;\n  if(!x.next_followup_at) return (x.score||0)>=40;\n  const t=Date.parse(x.next_followup_at);\n  return Number.isFinite(t) && t<=now;\n}).slice(0,100);\nreturn due.map(x=>({json:x}));"
       }
     },
     {
@@ -622,31 +552,14 @@
     {
       "id": "r2r-0037",
       "name": "Follow-up • Enfileirar",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         530,
         2430
       ],
       "parameters": {
-        "method": "POST",
-        "url": "={{$env.R2R_DATA_API + '/outreach/enqueue'}}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "={{JSON.stringify($json)}}",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "const store=$getWorkflowStaticData('global');\nstore.outreachQueue=store.outreachQueue||[];\nconst items=$input.all().map(i=>i.json);\nfor(const x of items){\n  const key=String(x.lead_id||x.phone||x.email||'');\n  if(!key) continue;\n  const exists=store.outreachQueue.some(q=>String(q.lead_id||q.phone||q.email||'')===key && q.status==='queued');\n  if(!exists) store.outreachQueue.push({...x,status:'queued',queued_at:new Date().toISOString(),reason:'followup'});\n}\nreturn [{json:{ok:true,queued:items.length}}];"
       }
     },
     {
@@ -697,30 +610,32 @@
     {
       "id": "r2r-0042",
       "name": "Agenda • Integrar Calendar",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
       "position": [
         250,
         2920
       ],
       "parameters": {
-        "method": "POST",
-        "url": "={{$env.R2R_CALENDAR_WEBHOOK}}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
+        "resource": "event",
+        "operation": "create",
+        "calendar": {
+          "__rl": true,
+          "value": "primary",
+          "mode": "id"
         },
-        "sendBody": true,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "={{JSON.stringify($json)}}",
-        "options": {
-          "timeout": 30000
+        "start": "={{ $json.start || $json.start_time || $json.preferred_times?.[0] || $now.plus(1, 'day').set({hour:10,minute:0,second:0,millisecond:0}).toISO() }}",
+        "end": "={{ $json.end || $json.end_time || $now.plus(1, 'day').set({hour:10,minute:30,second:0,millisecond:0}).toISO() }}",
+        "useDefaultReminders": true,
+        "additionalFields": {
+          "summary": "={{ 'Reunião R2R - ' + ($json.name || 'Lead') }}",
+          "description": "={{ 'Interesse: ' + ($json.service_interest || 'A definir') + '\\nTelefone: ' + ($json.phone || '') + '\\nEmail: ' + ($json.email || '') }}",
+          "attendees": "={{ $json.email || '' }}"
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "name": "R2R Google Calendar"
         }
       }
     },
@@ -775,7 +690,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.R2R_AI_ENDPOINT}}",
+        "url": "https://api.openai.com/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -844,31 +759,14 @@
     {
       "id": "r2r-0052",
       "name": "Onboarding • Criar Projeto",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         250,
         3620
       ],
       "parameters": {
-        "method": "POST",
-        "url": "={{$env.R2R_DATA_API + '/clients/onboard'}}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "={{JSON.stringify($json)}}",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "const store=$getWorkflowStaticData('global');\nstore.clients=store.clients||{};\nstore.projects=store.projects||{};\nconst x=$json;\nconst key=String(x.client_id||x.phone||x.email||x.name||('client-'+Date.now()));\nstore.clients[key]={...x,client_id:key,status:'ativo',updated_at:new Date().toISOString()};\nstore.projects[key]={client_id:key,service:x.service||'',checklist:x.checklist||[],status:'onboarding',created_at:new Date().toISOString()};\nreturn [{json:{ok:true,client_id:key,project:store.projects[key]}}];"
       }
     },
     {
@@ -922,7 +820,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.R2R_AI_ENDPOINT}}",
+        "url": "https://api.openai.com/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -983,26 +881,14 @@
     {
       "id": "r2r-0060",
       "name": "Performance • Buscar Métricas",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         10,
         4490
       ],
       "parameters": {
-        "method": "GET",
-        "url": "={{$env.R2R_DATA_API + '/marketing/daily-metrics'}}",
-        "sendHeaders": false,
-        "headerParameters": {
-          "parameters": []
-        },
-        "sendBody": false,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "const store=$getWorkflowStaticData('global');\nstore.metrics=store.metrics||[];\nconst since=Date.now()-48*60*60*1000;\nconst rows=store.metrics.filter(x=>{\n  const t=Date.parse(x.at||x.date||x.created_at||'');\n  return !Number.isFinite(t) || t>=since;\n});\nreturn [{json:{metrics:rows,count:rows.length,generated_at:new Date().toISOString()}}];"
       }
     },
     {
@@ -1039,7 +925,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.R2R_AI_ENDPOINT}}",
+        "url": "https://api.openai.com/v1/chat/completions",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -1073,10 +959,14 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.R2R_NOTIFY_WEBHOOK}}",
+        "url": "=https://evolution-evolution-api.ke4n49.easypanel.host/message/sendText/R2R%20Marketing%20Digital",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.EVOLUTION_API_KEY}}"
+            },
             {
               "name": "Content-Type",
               "value": "application/json"
@@ -1086,7 +976,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{JSON.stringify($json)}}",
+        "body": "={{JSON.stringify({number:$env.R2R_ADMIN_PHONE,text:($json.summary||$json.message||JSON.stringify($json)).slice(0,3500),delay:800,linkPreview:false})}}",
         "options": {
           "timeout": 30000
         }
@@ -1115,26 +1005,14 @@
     {
       "id": "r2r-0066",
       "name": "CS • Buscar Saúde",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         10,
         4840
       ],
       "parameters": {
-        "method": "GET",
-        "url": "={{$env.R2R_DATA_API + '/clients/health'}}",
-        "sendHeaders": false,
-        "headerParameters": {
-          "parameters": []
-        },
-        "sendBody": false,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "const store=$getWorkflowStaticData('global');\nstore.clients=store.clients||{};\nconst rows=Object.values(store.clients);\nreturn rows.map(c=>({json:{\n  ...c,\n  days_since_contact:c.last_contact_at?Math.floor((Date.now()-Date.parse(c.last_contact_at))/86400000):999,\n  payment_overdue:Boolean(c.payment_overdue),\n  performance_alerts:Number(c.performance_alerts||0),\n  open_support_issues:Number(c.open_support_issues||0),\n  nps:c.nps??null\n}}));"
       }
     },
     {
@@ -1161,10 +1039,14 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.R2R_NOTIFY_WEBHOOK}}",
+        "url": "=https://evolution-evolution-api.ke4n49.easypanel.host/message/sendText/R2R%20Marketing%20Digital",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.EVOLUTION_API_KEY}}"
+            },
             {
               "name": "Content-Type",
               "value": "application/json"
@@ -1174,7 +1056,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{JSON.stringify($json)}}",
+        "body": "={{JSON.stringify({number:$env.R2R_ADMIN_PHONE,text:($json.summary||$json.message||JSON.stringify($json)).slice(0,3500),delay:800,linkPreview:false})}}",
         "options": {
           "timeout": 30000
         }
@@ -1203,26 +1085,14 @@
     {
       "id": "r2r-0070",
       "name": "Relatório • Buscar KPIs",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         10,
         5190
       ],
       "parameters": {
-        "method": "GET",
-        "url": "={{$env.R2R_DATA_API + '/reports/executive-daily'}}",
-        "sendHeaders": false,
-        "headerParameters": {
-          "parameters": []
-        },
-        "sendBody": false,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "",
-        "options": {
-          "timeout": 30000
-        }
+        "jsCode": "const store=$getWorkflowStaticData('global');\nstore.leads=store.leads||{};\nstore.outreachLog=store.outreachLog||[];\nstore.meetings=store.meetings||[];\nstore.proposals=store.proposals||[];\nstore.clients=store.clients||{};\nstore.sales=store.sales||[];\nconst start=new Date(); start.setHours(0,0,0,0);\nconst today=t=>{const d=Date.parse(t||'');return Number.isFinite(d)&&d>=start.getTime();};\nconst leads=Object.values(store.leads);\nconst sales=store.sales;\nreturn [{json:{\n  new_leads:leads.filter(x=>today(x.created_at||x.updated_at)).length,\n  hot_leads:leads.filter(x=>(x.score||0)>=70).length,\n  outreach_sent:store.outreachLog.filter(x=>today(x.logged_at||x.sent_at)).length,\n  replies:leads.filter(x=>today(x.last_reply_at)).length,\n  meetings:store.meetings.filter(x=>today(x.created_at||x.start)).length,\n  proposals:store.proposals.filter(x=>today(x.generated_at||x.created_at)).length,\n  sales:sales.filter(x=>today(x.closed_at||x.created_at)).length,\n  closed_revenue:sales.filter(x=>today(x.closed_at||x.created_at)).reduce((a,b)=>a+Number(b.value||0),0),\n  mrr:Object.values(store.clients).reduce((a,b)=>a+Number(b.mrr||0),0),\n  clients_at_risk:Object.values(store.clients).filter(x=>x.risk_level==='alto').length,\n  automation_errors:Number(store.automation_errors||0)\n}}];"
       }
     },
     {
@@ -1249,10 +1119,14 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.R2R_NOTIFY_WEBHOOK}}",
+        "url": "=https://evolution-evolution-api.ke4n49.easypanel.host/message/sendText/R2R%20Marketing%20Digital",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.EVOLUTION_API_KEY}}"
+            },
             {
               "name": "Content-Type",
               "value": "application/json"
@@ -1262,7 +1136,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{JSON.stringify($json)}}",
+        "body": "={{JSON.stringify({number:$env.R2R_ADMIN_PHONE,text:$json.formatted||JSON.stringify($json),delay:800,linkPreview:false})}}",
         "options": {
           "timeout": 30000
         }
@@ -1309,10 +1183,14 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "={{$env.R2R_NOTIFY_WEBHOOK}}",
+        "url": "=https://evolution-evolution-api.ke4n49.easypanel.host/message/sendText/R2R%20Marketing%20Digital",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.EVOLUTION_API_KEY}}"
+            },
             {
               "name": "Content-Type",
               "value": "application/json"
@@ -1322,7 +1200,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{JSON.stringify($json)}}",
+        "body": "={{JSON.stringify({number:$env.R2R_ADMIN_PHONE,text:($json.summary||$json.message||JSON.stringify($json)).slice(0,3500),delay:800,linkPreview:false})}}",
         "options": {
           "timeout": 30000
         }
@@ -1338,7 +1216,7 @@
         -1000
       ],
       "parameters": {
-        "content": "## R2R + Evolution API\nEvolution Base URL:\nhttps://evolution-evolution-api.ke4n49.easypanel.host\n\nInstância:\nR2R Marketing Digital\n\nWebhook principal:\nhttps://n8n-n8n.ke4n49.easypanel.host/webhook/r2r/inbound-sales\n\n### Segredos obrigatórios no ambiente\nEVOLUTION_API_KEY\nR2R_AI_ENDPOINT\nR2R_AI_API_KEY\nR2R_AI_MODEL\nR2R_DATA_API\nR2R_NOTIFY_WEBHOOK\nR2R_CALENDAR_WEBHOOK\n\nO token Evolution nunca fica salvo neste JSON/repositório público.",
+        "content": "# R2R MASTER OS • AUTOSSUFICIENTE v4\n\n## Variáveis privadas no EasyPanel / n8n\n- N8N_BLOCK_ENV_ACCESS_IN_NODE=false\n- EVOLUTION_API_KEY\n- R2R_AI_API_KEY\n- R2R_AI_MODEL (opcional; padrão gpt-5.6)\n- R2R_ADMIN_PHONE\n\n## Integrações nativas\n- OpenAI: endpoint oficial direto no workflow\n- Evolution API: envio/recebimento direto\n- CRM/fila/KPIs: memória persistente do workflow n8n\n- Google Calendar: nó nativo, credencial \"R2R Google Calendar\"\n- PostgreSQL: estrutura SQL em /database/schema.sql para migração/backup\n\nREMOVIDOS:\nR2R_AI_ENDPOINT\nR2R_DATA_API\nR2R_NOTIFY_WEBHOOK\nR2R_CALENDAR_WEBHOOK",
         "height": 520,
         "width": 740
       }
@@ -1830,7 +1708,7 @@
   "staticData": null,
   "meta": {
     "templateCredsSetupCompleted": false,
-    "r2rPackageVersion": "3.1-evolution"
+    "r2rPackageVersion": "4.0-self-contained"
   },
   "tags": []
 }
