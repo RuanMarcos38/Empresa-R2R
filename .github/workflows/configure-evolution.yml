@@ -1,0 +1,30 @@
+name: Configurar Evolution API
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/configure-evolution.sh"
+      - ".github/workflows/configure-evolution.yml"
+      - "n8n/R2R_MASTER.json"
+
+concurrency:
+  group: r2r-evolution-production
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar webhook da Evolution API
+        env:
+          EVOLUTION_API_KEY: ${{ secrets.EVOLUTION_API_KEY }}
+          EVOLUTION_BASE_URL: https://evolution-evolution-api.ke4n49.easypanel.host
+          EVOLUTION_INSTANCE: R2R Marketing Digital
+          N8N_WEBHOOK_URL: https://n8n-n8n.ke4n49.easypanel.host/webhook/r2r/inbound-sales
+        run: bash scripts/configure-evolution.sh
